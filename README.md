@@ -25,6 +25,15 @@ python3 app.py --db ./data.db --port 8301
 ## 核心对象
 
 - `athlete`：运动员；`sample`：检测样本；`case`：结果管理案件。
+- `exemption`：治疗用药豁免（TUE）独立记录，由医生登记，包含`athlete_id`、`substance`、`valid_from`、`valid_to`，可选`supersedes`指向被取代的旧豁免。
+
+## 治疗用药豁免流程
+
+- 医生（`doctor`角色）登记豁免后状态为`pending`，必须由`reviewer`或`admin`审核；审核人不能与申请人相同，批准后状态变为`active`才生效，`reject`则驳回。
+- 实验室对样本执行`report_adverse`时，系统按采样日期（`collected_at`）核对：若该运动员存在`active`且覆盖采样日期的豁免（样本记录了`substance`时还需物质匹配），结果进入`protected`状态，并在样本上固化判定快照（豁免ID、版本、判定时间），不能开案。
+- 判定快照在报告阳性时一次性写入；事后作废、重新申请或新增豁免都不会改写已有判定。
+- `void`作废豁免（需填`reason`）保留原记录；重新申请新建记录并可用`supersedes`关联旧记录，历次记录和审计时间线均保留。
+- `GET /api/results`返回结果管理列表，标明每条阳性/受保护结果的`protected`标记、对应豁免和已开案件。
 
 ## 主要接口
 
@@ -33,6 +42,7 @@ python3 app.py --db ./data.db --port 8301
 - `POST /api/<kind>`：创建对象；请求体为JSON。
 - `GET /api/entities/<id>`：读取对象当前版本。
 - `POST /api/entities/<id>/actions`：提交`{"action":"动作名","data":{...},"expected_version":数字}`。
+- `GET /api/results`：结果管理列表（含受保护标记）。
 - `GET /api/audit`：读取审计记录。
 
 请求身份通过`X-User-Id`和`X-Role`请求头传入。创建和动作的可执行角色由规则引擎控制。

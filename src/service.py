@@ -69,5 +69,32 @@ class DomainService:
             kind = self.rules.normalize_kind(kind)
         return self.repository.list_entities(kind=kind, status=status)
 
+    def result_overview(self):
+        samples = self.repository.list_entities(kind="sample")
+        cases = self.repository.list_entities(kind="case")
+        case_by_sample = {}
+        for case in cases:
+            sample_id = case["data"].get("sample_id")
+            if sample_id and sample_id not in case_by_sample:
+                case_by_sample[sample_id] = case["id"]
+        items = []
+        for sample in samples:
+            if sample["status"] not in ("adverse", "protected"):
+                continue
+            protection = sample["data"].get("protection") or {}
+            items.append(
+                {
+                    "sample_id": sample["id"],
+                    "athlete_id": sample["data"].get("athlete_id"),
+                    "status": sample["status"],
+                    "substance": sample["data"].get("substance"),
+                    "sampled_on": protection.get("sampled_on"),
+                    "protected": bool(protection.get("protected")),
+                    "exemption_id": protection.get("exemption_id"),
+                    "case_id": case_by_sample.get(sample["id"]),
+                }
+            )
+        return {"items": items}
+
     def audit_log(self, entity_id=None):
         return self.repository.list_audit(entity_id=entity_id)
