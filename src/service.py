@@ -64,10 +64,53 @@ class DomainService:
             raise NotFoundError("entity not found: " + entity_id)
         return entity
 
-    def list(self, kind=None, status=None):
+    def list(self, kind=None, status=None, athlete_id=None):
         if kind:
             kind = self.rules.normalize_kind(kind)
-        return self.repository.list_entities(kind=kind, status=status)
+        items = self.repository.list_entities(kind=kind, status=status)
+        if athlete_id:
+            items = [item for item in items if item["data"].get("athlete_id") == athlete_id]
+        return items
+
+    def results(self, athlete_id=None):
+        """Results-management view over analyzed samples.
+
+        Each item surfaces the frozen TUE determination (protected or not)
+        and the case opened from the sample, so protected results are
+        distinguishable from actionable adverse findings.
+        """
+        samples = [
+            sample
+            for sample in self.list("sample")
+            if sample["status"] in ("analyzed", "adverse", "protected", "cleared")
+        ]
+        cases = self.list("case")
+        cases_by_sample = {}
+        for case in cases:
+            cases_by_sample.setdefault(case["data"].get("sample_id"), []).append(case["id"])
+        items = []
+        for sample in samples:
+            if athlete_id and sample["data"].get("athlete_id") != athlete_id:
+                continue
+            determination = sample["data"].get("tue_determination") or {}
+            items.append(
+                {
+                    "sample_id": sample["id"],
+                    "sample_code": sample["data"].get("sample_code"),
+                    "athlete_id": sample["data"].get("athlete_id"),
+                    "result": sample["data"].get("result"),
+                    "status": sample["status"],
+                    "protected": bool(determination.get("protected")),
+                    "detected_substances": determination.get("detected_substances")
+                    or sample["data"].get("substances", []),
+                    "sample_day": determination.get("sample_day")
+                    or str(sample["data"].get("collected_at", ""))[:10],
+                    "covering_tues": determination.get("covering_tues", []),
+                    "determined_at": determination.get("determined_at"),
+                    "case_ids": cases_by_sample.get(sample["id"], []),
+                }
+            )
+        return items
 
     def audit_log(self, entity_id=None):
         return self.repository.list_audit(entity_id=entity_id)

@@ -85,6 +85,12 @@ def create_handler(service, rules, static_dir):
                         return self._send_html(200, handle.read())
                 if parts == ["api", "audit"]:
                     return self._send(200, {"items": service.audit_log()})
+                if parts[:2] == ["api", "results"]:
+                    query = parse_qs(parsed.query)
+                    athlete_id = query.get("athlete_id", [None])[0]
+                    return self._send(
+                        200, {"items": service.results(athlete_id=athlete_id)}
+                    )
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     return self._send(200, service.get(parts[2]))
                 if len(parts) >= 2 and parts[0] == "api":
@@ -94,9 +100,14 @@ def create_handler(service, rules, static_dir):
                         return self._send(200, service.get(parts[2]))
                     query = parse_qs(parsed.query)
                     status = query.get("status", [None])[0]
+                    athlete_id = query.get("athlete_id", [None])[0]
                     return self._send(
                         200,
-                        {"items": service.list(parts[1], status=status)},
+                        {
+                            "items": service.list(
+                                parts[1], status=status, athlete_id=athlete_id
+                            )
+                        },
                     )
                 raise NotFoundError("not found")
             except Exception as exc:
